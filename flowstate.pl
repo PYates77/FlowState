@@ -19,7 +19,7 @@ $| = 1;
 
 sub clear_screen {
     system $^O eq 'MSWin32' ? 'cls' : 'clear';
-    print("[ FLOWSTATE ]\n");
+    print("[ FLOWSTATE ]\n\n");
 }
 
 sub get_char {
@@ -39,26 +39,75 @@ sub new_node ($) {
     return $n;
 }
 
+sub edge_select ($$$) {
+    my ($g, $a, $b) = @_;
+
+    my $e;
+    my @edges = $g->edge($a, $b);
+    if ($#edges > 0) {
+        print("\nAmbigous Edge Selection - Choose One:\n");
+        my @i = (0 .. $#edges);
+        my $i;
+        for(@i) {
+            $i = $_;
+            my $label = $edges[$i]->get_attribute('label');
+            if (not defined $label or $label eq "") {
+                $label = "<blank>";
+            } else {
+                $label =~ s/\s+$//;
+            }
+            printf("%d - %s\n", $i, $label);
+        }
+        
+        printf("\n%d - cancel\n>", $i+1);
+        my $selection = <STDIN>;
+        if ($selection >= 0 && $selection <= $#edges) {
+            $e = $edges[$selection];
+        }
+
+    } else {
+        $e = $edges[0];
+    }
+
+    return $e;
+}
+
+######### SCRIPT STARTS HERE ##################
+
+
 clear_screen();
 
 my $selected;
-my $selectMode = 0;
+my $edgeMode = 0;
+my $edgeName = 0;
 
 while (1) {
 
     #print(">");
-    if ($selectMode == 1) {
-        printf("\nLink Mode...");
+    if ($edgeMode == 1) {
+        printf("\nEdge Mode...");
     }
+
 
     my $cmd = get_char();
 
 
     if (ord($cmd) == 13) { # enter key
-        if ($selectMode == 1 && defined $selected) {
-            $g->add_edge($selected, $active); 
-        }
-        $selectMode = 0;
+        if ($edgeMode == 1 && defined $selected) {
+            if ($edgeName) {
+                printf("\nEdge Label >");
+                my $label = <STDIN>;
+                my $e = $g->add_edge($selected, $active); 
+                $e->set_attribute('label', $label);
+            } else {
+                $g->add_edge($selected, $active); 
+            }
+        }         
+        $edgeMode = 0;
+
+    } elsif (ord($cmd) == 27) { #esc key
+        $edgeMode = 0;
+        undef $selected;
 
     } elsif ($cmd eq 'n') {
         printf("\nNode Label >");
@@ -89,24 +138,55 @@ while (1) {
             $edge->set_attribute('label',$branch);
         }
 
-    } elsif ( $cmd eq 's') { 
-        $selectMode = 1;
+    } elsif ( $cmd eq 'e') { 
+        $edgeMode = 1;
+        $edgeName = 0;
         $selected = $active;
-
+    } elsif ( $cmd eq 'E') {
+        $edgeMode = 1;
+        $edgeName = 1;
+        $selected = $active;
     } elsif ($cmd eq 'r') {
         if (defined $active) {
-            printf("\nRename >");
-            my $label = <STDIN>;
-            $active->set_attribute('label', "*" . $label); # a little jank, but have to put the "*" in since its the active node
+            if ($edgeMode == 0) {
+                printf("\nRename >");
+                my $label = <STDIN>;
+                $active->set_attribute('label', "*" . $label); # a little jank, but have to put the "*" in since its the active node
+            } else {
+                $edgeMode = 0;
+                if (defined $selected) {
+                    my $e = edge_select($g, $selected, $active);
+                    if (defined $e) {
+                        printf("\nRename Edge >");
+                        my $label = <STDIN>;
+                        $e->set_attribute('label', $label);
+                    }
+                }
+            }
         }
 
     } elsif ($cmd eq 'x') {
         if (defined $active) {
-            printf("\nReally Delete? ");
-            my $confirm = <STDIN>;
-            if ($confirm =~ '^y' || $confirm =~ '^d') {
-                $g->del_node($active);
-                $newActive = $g->root_node();
+            if ($edgeMode == 0) {
+                printf("\nReally Delete? ");
+                my $confirm = <STDIN>;
+                if ($confirm =~ '^y' || $confirm =~ '^d') {
+                    $g->del_node($active);
+                    $newActive = $g->root_node();
+                }
+            } else {
+                $edgeMode = 0;
+                printf("\nReally Delete Edge? ");
+                my $confirm = <STDIN>;
+                if ($confirm =~ '^y' || $confirm =~ '^d') {
+                    if (defined $selected) {
+                        my $e = edge_select($g, $selected, $active);
+                        if (defined $e) {
+                            $g->del_edge($e);
+                            $newActive = $active; # idk this seems to refresh the tree
+                        }
+                    }
+                }
             }
         }
 
@@ -182,12 +262,12 @@ while (1) {
         }
         
     } elsif ($cmd eq '?') {
-        printf("\nWork in progress...\nVim Directions: Move around\nN: new independent node\nC: new child node\nP: new parent node\nX: delete node\nR: rename node\nS: select this node, next node you press <enter> on will get linked\n");
+        printf("\nWork in progress...\nVim Directions: Move around\nn: new independent node\nc: new child node\np: new parent node\nx: delete node (edge mode delete edge)\nr: rename node (edge mode rename edge)\ne/E: edge mode - select this node, then select another node with <enter>, (E for name edge)\nq: quit");
         next;
     } elsif ($cmd eq 'q') {
         exit(); 
     } else {
-        print(ord($cmd));
+        #print(ord($cmd)); # use this if you need the character code of a special keypress
     }
 
     if (defined $newActive) {
