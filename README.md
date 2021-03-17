@@ -1,7 +1,7 @@
 # FlowState
 In-terminal flowchart and state machine builder
 
-![demo](https://github.com/PYates77/FlowSatate/blob/master/Demo.png?raw=true)
+![demo](https://raw.githubusercontent.com/PYates77/FlowState/master/Demo.png)
 
 * Simple navigation with familiar vim keys
 * Automatic layout
